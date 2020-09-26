@@ -12,7 +12,9 @@ distance matrices calculated from richness and evenness coordinates and detect s
 
 ## Description
 This GitHub repository contains the source code used in the publication "Evenness-Richness scatter plots: a graphical, intuitive approach for alpha diversity analysis".
-The article (preprint, not peer-reviewed) is available on BioRxiv: https://www.biorxiv.org/content/10.1101/2020.09.23.310045v1
+The article (preprint, not peer-reviewed) is available on BioRxiv: 
+
+https://www.biorxiv.org/content/10.1101/2020.09.23.310045v1
 
 ## Dependencies
  * R v3.4.0+ and RStudio v0.9+
