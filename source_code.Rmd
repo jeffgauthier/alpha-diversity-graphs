@@ -1,0 +1,414 @@
+---
+title: "Evenness-Richness scatter plots: a graphical, intuitive approach to alpha diversity analysis"
+subtitle: "Source code used for generating figures and tables"
+author: "Jeff Gauthier, Nicolas Derome"
+date: 'Last edit: September 2020'
+output: pdf_document
+---
+
+# Introduction
+
+```{r table1, tidy=TRUE}
+# build a function to calculate Shannon's index:
+get_shannon <- function(x) { # x is a numeric vector containing relative abundances
+  h <- -sum(x*log(x))
+  return(h)
+}
+
+# community number 1 (more even)
+biome_1 <- data.frame(Species=c("sp1", "sp2", "sp3", "sp4", "sp5"),
+                      prop=c(0.2, 0.2, 0.2, 0.2, 0.2))
+biome_1
+paste0("Shannon index: ", round(get_shannon(biome_1$prop), 3))
+
+# community number 2 (more rich)
+biome_2 <- data.frame(Species=c("sp1", "sp2", "sp3", "sp4", "sp5", "sp6", "sp7", "sp8"),
+                      prop=c(0.5, 0.1, 0.1, 0.1, 0.095, 0.05, 0.03, 0.025))
+biome_2
+paste0("Shannon index: ", round(get_shannon(biome_2$prop), 3))
+```
+
+
+*********************************************
+
+# Methodology
+
+## Derivation of evenness
+
+```{r table2, tidy=TRUE}
+# community number 1 (more even)
+biome_1$prop_ln_prop <- biome_1$prop * -log(biome_1$prop)
+biome_1
+paste0("Community 1 median evenness: ", median(biome_1$prop_ln_prop))
+paste0("Community 1 normalized-median evenness: ", median(biome_1$prop_ln_prop) / max(biome_1$prop_ln_prop))
+
+# community number 2 (more rich)
+biome_2$prop_ln_prop <- biome_2$prop * -log(biome_2$prop)
+biome_2
+paste0("Community 2 median evenness: ", median(biome_2$prop_ln_prop))
+paste0("Community 2 normalized-median evenness: ", median(biome_2$prop_ln_prop) / max(biome_2$prop_ln_prop))
+
+# community number 3 (more even)
+biome_3 <- data.frame(Species=c("sp1", "sp2", "sp3"),
+                      prop=c(1/3, 1/3, 1/3))                    # ln_pi
+biome_3$prop_ln_prop <- biome_3$prop * -log(biome_3$prop)      #pi ln pi
+biome_3
+
+# community number 4 (more rich)
+biome_4 <- data.frame(Species=c("sp1", "sp2", "sp3"),
+                      prop=c(0.95, 0.095, 0.005))             # ln_pi
+biome_4$prop_ln_prop <- biome_4$prop * -log(biome_4$prop)    #pi ln pi
+biome_4
+
+# normalized-median evenness
+norm_1 <- median(biome_1$prop_ln_prop) / max(biome_1$prop_ln_prop)
+norm_2 <- median(biome_2$prop_ln_prop) / max(biome_2$prop_ln_prop)
+norm_3 <- median(biome_3$prop_ln_prop) / max(biome_3$prop_ln_prop)
+norm_4 <- median(biome_4$prop_ln_prop) / max(biome_4$prop_ln_prop)
+
+# View in data frame
+even_compare <- data.frame(Biome=c("Community 1", "Community 2", "Community 3", "Community 4"),
+                           Richness=c(5, 8, 3, 3),
+                           Norm_Even=c(norm_1, norm_2, norm_3, norm_4))
+even_compare
+```
+
+## Graphical representation
+
+```{r fig1, tidy=TRUE}
+library(ggplot2)
+
+fig1 <- ggplot(even_compare, aes(x=Richness, y=Norm_Even)) +
+          geom_point() +
+          geom_text(label=even_compare$Biome, nudge_y=-0.05) +
+          xlim(0, 10) + ylim(0,1) +
+          xlab("Species richness") + ylab("Normalized-mean evenness") +
+          theme_bw()
+fig1
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig1, filename="Figures/Figure_1.pdf")
+```
+ 
+
+## Example with a larger mock dataset
+
+```{r table3, tidy=TRUE}
+mydata <- read.table("01_fictional_data/fictional_data_v1.1.csv", header=TRUE)
+mydata
+```
+
+```{r fig2, tidy=TRUE}
+# make the 2D plot
+library(ggplot2)
+
+## Figure 2A
+fig2a <- ggplot(mydata, aes(x=richness, y=norm_even, color=Group)) +
+           geom_point() +
+           geom_text(label=mydata$Biome) +
+           xlab("Species richness") + ylab("Normalized-mean evenness") +
+           stat_ellipse(level=0.95) +
+           theme_bw() +
+           ggtitle("A") +
+           theme(legend.position="none")
+fig2a
+
+##Figure 2B
+source("R_modules/summarySE.R")
+fig2b.data <- summarySE(mydata, measurevar="shannon", groupvars=c("Group")) 
+fig2b <- ggplot(fig2b.data, aes(x=Group, y=shannon, fill=Group)) +
+        geom_bar(position=position_dodge(), stat="identity") +
+        ylab("Shannon") +
+        geom_errorbar(aes(ymin=shannon-ci, ymax=shannon+ci), width=.2) + 
+        ggtitle("B")
+fig2b
+
+## grid arrange
+library(gridExtra)
+fig2 <- grid.arrange(fig2a, fig2b, ncol=2)
+fig2
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig2, filename="Figures/Figure_2.pdf")
+```
+
+```{r permanova_mock_data, tidy=TRUE}
+## add new grouping variable
+mydata$Region <- rep(c("Urban", "Rural"), 5)
+
+## table 3
+mydata
+
+## permanova
+library(vegan)
+set.seed(12345)
+p3.permanova <- adonis(richness+norm_even~Group*Region, data=mydata, method="euclidean", permutations=99)
+p3.permanova
+
+## comparison with anova
+p3.aov <- aov(shannon~Group*Region, data=mydata)
+summary(p3.aov)
+```
+
+
+*************************************************
+
+# Test on real-world data: Enterotypes of the human gut microbiome (2011)
+
+## Introduction to the dataset
+
+```{r ent_data_prep, tidy=TRUE}
+library(phyloseq)
+data(enterotype)
+
+# Compile an ASV table with relative genera abundances per sample
+ent.data <- otu_table(transform_sample_counts(enterotype, function(x) {x/sum(x)})) 
+ent.data <- as.data.frame(ent.data)
+
+# transpose otu_table (so that samples are rows)
+ent.data <- t(ent.data)
+ent.data <- as.data.frame(ent.data)
+
+# replace otu names by unique number IDs
+names(ent.data) <- seq(1:ncol(ent.data))
+
+# product-ln-transform sample counts
+plp.ent.data <- - ent.data * log(ent.data)
+
+# replace NaN by zero
+plp.ent.data[plp.ent.data=="NaN"] <- 0
+
+# add Evenness (median must not include zero elements!)
+library(matrixStats)
+library(qlcMatrix)
+plp.ent.data$Evenness <- apply(plp.ent.data, 1, function(x) median(x[x != 0])/max(x))
+
+# add Shannon index
+plp.ent.data$Shannon <- rowSums(plp.ent.data[, 1:553])
+
+# add observed richness (only rows 1:54 contain counts!)
+# rowSums(c!=0) counts non-zero cells pre each row
+plp.ent.data$Richness <- rowSums(plp.ent.data[, 1:553] != 0)
+
+# Add sequencing tech
+plp.ent.data$SeqTech <- sample_data(enterotype)$SeqTech[1:280]
+
+# OTU abundances are nor required anymore
+plp.ent.data[, 1:553] <- NULL
+
+# view table
+plp.ent.data
+```
+
+## Basic alpha-diversity analysis
+
+```{r fig3, tidy=TRUE}
+
+# figure 3a
+# Add sample group variable
+plp.ent.data$Enterotype <- sample_data(enterotype)$Enterotype[1:280]
+# use NA-free dataset (UC and CD removed because n=1)
+plp.ent.data.noNA <- subset(plp.ent.data, plp.ent.data$Enterotype %in% c("1", "2", "3"))
+# top 10 taxa
+source("R_modules/plot_bar_err.R")
+fig3a <- plot_bar_err(subset_samples(enterotype, Enterotype %in% c("1", "2", "3")), 
+                      by="Enterotype", n=10, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
+               ylab("Relative abundance") +
+               ggtitle("A")
+fig3a
+
+# figure 3b
+source("R_modules/summarySE.R")
+# summarize data and remove NA's
+plp.ent.data.noNA.summary <- summarySE(plp.ent.data.noNA, measurevar="Shannon", groupvars=c("Enterotype"))
+# make the shannon index plot
+fig3b <- ggplot(plp.ent.data.noNA.summary, aes(x=Enterotype, y=Shannon, fill=Enterotype)) +
+        geom_bar(position=position_dodge(), stat="identity") +
+        geom_errorbar(aes(ymin=Shannon-ci, ymax=Shannon+ci), width=.2) +
+        ggtitle("B")
+fig3b
+
+#figure 3c
+# make evenness vs richness plot
+library(ggplot2)
+fig3c <- ggplot(plp.ent.data.noNA, aes(x=Richness, y=Evenness, color=Enterotype)) +
+                       geom_point() +
+                       stat_ellipse(level=0.95) +
+                       theme_bw() +
+                       ggtitle("C")
+fig3c
+
+# grid arrange
+library(gridExtra)
+fig3 <- grid.arrange(fig3a, grid.arrange(fig3b, fig3c, ncol=1), ncol=2)
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig3, filename="Figures/Figure_3.pdf")
+```
+
+```{r chi-squared_test_on_clusters, tidy=TRUE}
+## add EvR clusters info to dataset
+plp.ent.data.noNA$Cluster <- ifelse(plp.ent.data.noNA$Richness > 400, "Cluster 2", "Cluster 1")
+
+## summarize data by cluster
+library(reshape2)
+cluster.data <- dcast(plp.ent.data.noNA, formula = Cluster~Enterotype)
+colnames(cluster.data) <- c("Cluster", "Samples from Enterotype 1", "Samples from Enterotype 2", "Samples from Enterotype 3")
+
+## add margin totals
+cluster.data$Total <- cluster.data$`Samples from Enterotype 1` + 
+                      cluster.data$`Samples from Enterotype 2` + 
+                      cluster.data$`Samples from Enterotype 3`
+
+cluster.data[3,] <- c("Total", sum(cluster.data$`Samples from Enterotype 1`), 
+                               sum(cluster.data$`Samples from Enterotype 2`), 
+                               sum(cluster.data$`Samples from Enterotype 3`), 
+                               sum(cluster.data$Total))
+
+## View table 4
+cluster.data
+
+## Independence between 2 clusters (chi-squared)
+chisqdf <- cluster.data[1:2, 2:4]
+rownames(chisqdf) <- c("Cluster 1", "Cluster 2")
+X <- chisq.test(data.matrix(chisqdf))
+```
+
+## Clustering effect caused by sequencing technology
+
+```{r fig4, tidy=TRUE}
+# figure 4a
+library(ggplot2)
+fig4a <- ggplot(plp.ent.data.noNA, aes(x=Richness, y=Evenness, color=SeqTech)) +
+                       geom_point() +
+                       stat_ellipse(level=0.95) +
+                       theme_bw() +
+                       ggtitle("A") +
+                       theme(legend.position = "none")
+fig4a
+
+# figure 4b
+source("R_modules/summarySE.R")
+# make summary
+plp.ent.data.noNA.summary <- summarySE(plp.ent.data.noNA, measurevar="Shannon", groupvars=c("SeqTech")) 
+# make shannon index plot
+fig4b <- ggplot(plp.ent.data.noNA.summary, aes(x=SeqTech, y=Shannon, fill=SeqTech)) +
+        geom_bar(position=position_dodge(), stat="identity") +
+        geom_errorbar(aes(ymin=Shannon-ci, ymax=Shannon+ci), width=.2) +
+        ggtitle("B")
+fig4b
+
+# grid arrange
+library(gridExtra)
+fig4 <- grid.arrange(fig4a, fig4b, ncol=2)
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig4, filename="Figures/Figure_4.pdf")
+```
+
+```{r fig5, tidy=TRUE}
+# make the 2D plot
+library(ggplot2)
+
+# cluster1
+fig5a <- ggplot(subset(plp.ent.data.noNA, plp.ent.data.noNA$Cluster %in% "Cluster 1"), aes(x=Richness, y=Evenness, color=Enterotype)) +
+                       geom_point() +
+                       stat_ellipse(level=0.95) +
+                       ggtitle("Cluster 1 (Sanger/454)") +
+                       theme_bw()
+
+# cluster2
+fig5b <- ggplot(subset(plp.ent.data.noNA, plp.ent.data.noNA$Cluster %in% "Cluster 2"), aes(x=Richness, y=Evenness, color=Enterotype)) +
+                       geom_point() +
+                       stat_ellipse(level=0.95) +
+                       ggtitle("Cluster 2 (Illumina)") +
+                       theme_bw()
+
+# show plot
+library(gridExtra)
+fig5 <- grid.arrange(fig5a, fig5b)
+fig5
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig5, filename="Figures/Figure_5.pdf")
+```
+
+## Use of PERMANOVA to verify the clustering effect
+
+```{r permanova_enterotype, tidy=TRUE}
+library(vegan)
+set.seed(12345)
+ent.permanova <- adonis(Evenness+Richness~Cluster*Enterotype, data=plp.ent.data.noNA, method = "euclidean", permutations = 99)
+ent.permanova
+```
+
+## Influence of sequencing technology on top genera
+
+```{r fig6, tidy=TRUE}
+source("R_modules/plot_bar_err.R")
+
+# custom color palette
+color_bacteroides <- "red3"
+color_bifidobacterium <- "forestgreen"
+color_faecalibacterium <- "turquoise2"
+color_lachnospira <- "blue3"
+color_prevotella <- "magenta"
+color_blautia <- "slategray"
+color_roseburia <- "gold4"
+
+# split data by clusters: 1 (Sanger/454) and 2 (Illumina)
+enterotype.sanger <- subset_samples(enterotype, SeqTech %in% "Sanger")
+enterotype.454 <- subset_samples(enterotype, SeqTech %in% "Pyro454")
+enterotype.illumina <- subset_samples(enterotype, SeqTech %in% "Illumina")
+
+# top 10 taxa (Sanger)
+fig6.sanger <- plot_bar_err(subset_samples(enterotype.sanger, Enterotype %in% c("1", "2", "3")), 
+                             by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
+  ggtitle("Sanger") +
+  theme(legend.position="bottom", legend.direction="vertical") +
+  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name="Relative abundance") +
+  scale_fill_manual(values=c(color_bacteroides,
+                              color_bifidobacterium,
+                              color_faecalibacterium,
+                              color_lachnospira,
+                              color_prevotella))
+
+# top 10 taxa (454)
+fig6.454 <- plot_bar_err(subset_samples(enterotype.454, Enterotype %in% c("1", "2", "3")), 
+                          by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
+  ggtitle("454") +
+  theme(legend.position="bottom", legend.direction="vertical") +
+  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name=NULL) +
+  scale_fill_manual(values=c(color_bacteroides,
+                              color_blautia,
+                              color_faecalibacterium,
+                              color_prevotella,
+                              color_roseburia))
+
+# top 10 taxa (Illumina)
+fig6.illumina <- plot_bar_err(subset_samples(enterotype.illumina, Enterotype %in% c("1", "2", "3")), 
+                               by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
+  ggtitle("Illumina") +
+  theme(legend.position="bottom", legend.direction="vertical") +
+  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name=NULL) +
+  scale_fill_manual(values=c(color_bacteroides,
+                              color_faecalibacterium,
+                              color_lachnospira,
+                              color_prevotella,
+                              color_roseburia))
+
+# arrange and view plot
+library(gridExtra)
+fig6 <- grid.arrange(arrangeGrob(fig6.sanger, fig6.454, ncol=2), 
+             arrangeGrob(fig6.illumina, nrow=1), nrow=1, widths=c(2,1))
+fig6
+
+# pdf
+if(!dir.exists("Figures")) {dir.create("Figures")}
+ggsave(fig6, filename="Figures/Figure_6.pdf")
+```
