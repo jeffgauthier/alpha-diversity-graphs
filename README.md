@@ -1,5 +1,5 @@
 # alphadiversitygraphs
-## Evenness-Richness alpha diversity scatter plots
+## Evenness-Richness scatter plots for alpha diversity analysis
 
 Shannon's diversity index is a popular alpha diversity metric because it estimates both richness and evenness in a single equation. 
 However, since its value is dependent of both those parameters, there is theoretically an infinite number of richness / evenness value 
