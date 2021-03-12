@@ -2,7 +2,7 @@
 title: "Evenness-Richness scatter plots: a graphical, intuitive approach to alpha diversity analysis"
 subtitle: "Source code used for generating figures and tables"
 author: "Jeff Gauthier, Nicolas Derome"
-date: 'Last edit: September 2020'
+date: 'Last edit: March 2021'
 output: pdf_document
 ---
 
@@ -66,10 +66,17 @@ norm_2 <- median(biome_2$prop_ln_prop) / max(biome_2$prop_ln_prop)
 norm_3 <- median(biome_3$prop_ln_prop) / max(biome_3$prop_ln_prop)
 norm_4 <- median(biome_4$prop_ln_prop) / max(biome_4$prop_ln_prop)
 
+# pielou's evenness
+piel_1 <- get_shannon(biome_1$prop) / log(length(biome_1$prop))
+piel_2 <- get_shannon(biome_2$prop) / log(length(biome_2$prop))
+piel_3 <- get_shannon(biome_3$prop) / log(length(biome_3$prop))
+piel_4 <- get_shannon(biome_4$prop) / log(length(biome_4$prop))
+
 # View in data frame
 even_compare <- data.frame(Biome=c("Community 1", "Community 2", "Community 3", "Community 4"),
                            Richness=c(5, 8, 3, 3),
-                           Norm_Even=c(norm_1, norm_2, norm_3, norm_4))
+                           Norm_Even=c(norm_1, norm_2, norm_3, norm_4),
+                           Pielou=c(piel_1, piel_2, piel_3, piel_4))
 even_compare
 ```
 
@@ -78,11 +85,15 @@ even_compare
 ```{r fig1, tidy=TRUE}
 library(ggplot2)
 
+# palette for the colorblind
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
 fig1 <- ggplot(even_compare, aes(x=Richness, y=Norm_Even)) +
           geom_point() +
           geom_text(label=even_compare$Biome, nudge_y=-0.05) +
           xlim(0, 10) + ylim(0,1) +
           xlab("Species richness") + ylab("Normalized-mean evenness") +
+          scale_fill_manual(values=cbPalette) +
           theme_bw()
 fig1
 
@@ -95,51 +106,80 @@ ggsave(fig1, filename="Figures/Figure_1.pdf")
 ## Example with a larger mock dataset
 
 ```{r table3, tidy=TRUE}
-mydata <- read.table("01_fictional_data/fictional_data_v1.1.csv", header=TRUE)
+mydata <- read.table("01_fictional_data/fictional_data_v1.1.csv", header=TRUE, stringsAsFactors = T)
 mydata
 ```
 
 ```{r fig2, tidy=TRUE}
 # make the 2D plot
 library(ggplot2)
+library(ggrepel)
 
 ## Figure 2A
 fig2a <- ggplot(mydata, aes(x=richness, y=norm_even, color=Group)) +
            geom_point() +
-           geom_text(label=mydata$Biome) +
+           geom_text_repel(label=mydata$Biome) +
            xlab("Species richness") + ylab("Normalized-mean evenness") +
            stat_ellipse(level=0.95) +
            theme_bw() +
            ggtitle("A") +
+           scale_color_manual(values=cbPalette) +
            theme(legend.position="none")
 fig2a
 
-##Figure 2B
+## add new grouping variable
+mydata$Region <- rep(c("Urban", "Rural"), 5)
+
+## Figure 2B
+fig2b <- ggplot(mydata, aes(x=richness, y=norm_even, color=Region)) +
+           geom_point() +
+           geom_text_repel(label=mydata$Biome) +
+           xlab("Species richness") + ylab("Normalized-mean evenness") +
+           stat_ellipse(level=0.95) +
+           theme_bw() +
+           ggtitle("B") +
+           scale_color_manual(values=cbPalette) +
+           theme(legend.position="none")
+fig2b
+
+##Figure 2c
 source("R_modules/summarySE.R")
-fig2b.data <- summarySE(mydata, measurevar="shannon", groupvars=c("Group")) 
-fig2b <- ggplot(fig2b.data, aes(x=Group, y=shannon, fill=Group)) +
+fig2c.data <- summarySE(mydata, measurevar="shannon", groupvars=c("Group")) 
+fig2c <- ggplot(fig2c.data, aes(x=Group, y=shannon, fill=Group)) +
         geom_bar(position=position_dodge(), stat="identity") +
         ylab("Shannon") +
-        geom_errorbar(aes(ymin=shannon-ci, ymax=shannon+ci), width=.2) + 
-        ggtitle("B")
-fig2b
+        geom_errorbar(aes(ymin=shannon-ci, ymax=shannon+ci), width=.2) +
+        scale_fill_manual(values=cbPalette) +
+        ggtitle("C")
+fig2c
+
+##Figure 2d
+source("R_modules/summarySE.R")
+fig2d.data <- summarySE(mydata, measurevar="shannon", groupvars=c("Region")) 
+fig2d <- ggplot(fig2d.data, aes(x=Region, y=shannon, fill=Region)) +
+        geom_bar(position=position_dodge(), stat="identity") +
+        ylab("Shannon") +
+        geom_errorbar(aes(ymin=shannon-ci, ymax=shannon+ci), width=.2) +
+        scale_fill_manual(values=cbPalette) +
+        ggtitle("D")
+fig2d
 
 ## grid arrange
 library(gridExtra)
-fig2 <- grid.arrange(fig2a, fig2b, ncol=2)
+fig2 <- grid.arrange(
+  grid.arrange(fig2a, fig2b, ncol=1), 
+  grid.arrange(fig2c, fig2d, ncol=1), 
+  ncol=2)
 fig2
 
 # pdf
 if(!dir.exists("Figures")) {dir.create("Figures")}
-ggsave(fig2, filename="Figures/Figure_2.pdf")
+ggsave(fig2, filename="Figures/Figure_2ABCD.pdf")
 ```
 
 ```{r permanova_mock_data, tidy=TRUE}
 ## add new grouping variable
 mydata$Region <- rep(c("Urban", "Rural"), 5)
-
-## table 3
-mydata
 
 ## permanova
 library(vegan)
@@ -150,6 +190,20 @@ p3.permanova
 ## comparison with anova
 p3.aov <- aov(shannon~Group*Region, data=mydata)
 summary(p3.aov)
+
+## homoscedasticity?
+mydata.response <- cbind(mydata$richness, mydata$norm_even)
+p3.dist <- vegdist(mydata.response, method="euclidean")
+(p3.permdist.group <- betadisper(p3.dist, group=mydata$Group))
+(p3.permdist.region <- betadisper(p3.dist, group=mydata$Region))
+
+pdf("Figures/Figure_2E.pdf")
+plot(p3.permdist.group, main=NULL)
+dev.off()
+
+pdf("Figures/Figure_2F.pdf")
+plot.region <- plot(p3.permdist.region, main=NULL)
+dev.off()
 ```
 
 
@@ -214,8 +268,9 @@ plp.ent.data.noNA <- subset(plp.ent.data, plp.ent.data$Enterotype %in% c("1", "2
 # top 10 taxa
 source("R_modules/plot_bar_err.R")
 fig3a <- plot_bar_err(subset_samples(enterotype, Enterotype %in% c("1", "2", "3")), 
-                      by="Enterotype", n=10, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
+                      by="Enterotype", n=8, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
                ylab("Relative abundance") +
+               scale_fill_manual(values=cbPalette) +
                ggtitle("A")
 fig3a
 
@@ -227,6 +282,7 @@ plp.ent.data.noNA.summary <- summarySE(plp.ent.data.noNA, measurevar="Shannon", 
 fig3b <- ggplot(plp.ent.data.noNA.summary, aes(x=Enterotype, y=Shannon, fill=Enterotype)) +
         geom_bar(position=position_dodge(), stat="identity") +
         geom_errorbar(aes(ymin=Shannon-ci, ymax=Shannon+ci), width=.2) +
+        scale_fill_manual(values=cbPalette) +
         ggtitle("B")
 fig3b
 
@@ -237,6 +293,8 @@ fig3c <- ggplot(plp.ent.data.noNA, aes(x=Richness, y=Evenness, color=Enterotype)
                        geom_point() +
                        stat_ellipse(level=0.95) +
                        theme_bw() +
+                       scale_fill_manual(values=cbPalette) +
+                       scale_color_manual(values=cbPalette) +
                        ggtitle("C")
 fig3c
 
@@ -287,6 +345,8 @@ fig4a <- ggplot(plp.ent.data.noNA, aes(x=Richness, y=Evenness, color=SeqTech)) +
                        stat_ellipse(level=0.95) +
                        theme_bw() +
                        ggtitle("A") +
+                       scale_fill_manual(values=cbPalette) +
+                       scale_color_manual(values=cbPalette) +
                        theme(legend.position = "none")
 fig4a
 
@@ -298,6 +358,7 @@ plp.ent.data.noNA.summary <- summarySE(plp.ent.data.noNA, measurevar="Shannon", 
 fig4b <- ggplot(plp.ent.data.noNA.summary, aes(x=SeqTech, y=Shannon, fill=SeqTech)) +
         geom_bar(position=position_dodge(), stat="identity") +
         geom_errorbar(aes(ymin=Shannon-ci, ymax=Shannon+ci), width=.2) +
+        scale_fill_manual(values=cbPalette) +
         ggtitle("B")
 fig4b
 
@@ -319,6 +380,7 @@ fig5a <- ggplot(subset(plp.ent.data.noNA, plp.ent.data.noNA$Cluster %in% "Cluste
                        geom_point() +
                        stat_ellipse(level=0.95) +
                        ggtitle("Cluster 1 (Sanger/454)") +
+                       scale_color_manual(values=cbPalette) +
                        theme_bw()
 
 # cluster2
@@ -326,6 +388,7 @@ fig5b <- ggplot(subset(plp.ent.data.noNA, plp.ent.data.noNA$Cluster %in% "Cluste
                        geom_point() +
                        stat_ellipse(level=0.95) +
                        ggtitle("Cluster 2 (Illumina)") +
+                       scale_color_manual(values=cbPalette) +
                        theme_bw()
 
 # show plot
@@ -345,70 +408,18 @@ library(vegan)
 set.seed(12345)
 ent.permanova <- adonis(Evenness+Richness~Cluster*Enterotype, data=plp.ent.data.noNA, method = "euclidean", permutations = 99)
 ent.permanova
+
+## homoscedasticity?
+ent.response <- cbind(plp.ent.data.noNA$Evenness, plp.ent.data.noNA$Richness)
+p3.dist <- vegdist(ent.response, method="euclidean")
+(p3.permdist.Cluster <- betadisper(p3.dist, group=plp.ent.data.noNA$Cluster))
+(p3.permdist.Enterotype <- betadisper(p3.dist, group=plp.ent.data.noNA$Enterotype))
+
+## dispersion plot
+pdf("Figures/Figure_6.pdf")
+par(mfcol=c(2,1))
+plot(p3.permdist.Cluster, main="A")
+plot(p3.permdist.Enterotype, main="B")
+dev.off()
 ```
 
-## Influence of sequencing technology on top genera
-
-```{r fig6, tidy=TRUE}
-source("R_modules/plot_bar_err.R")
-
-# custom color palette
-color_bacteroides <- "red3"
-color_bifidobacterium <- "forestgreen"
-color_faecalibacterium <- "turquoise2"
-color_lachnospira <- "blue3"
-color_prevotella <- "magenta"
-color_blautia <- "slategray"
-color_roseburia <- "gold4"
-
-# split data by clusters: 1 (Sanger/454) and 2 (Illumina)
-enterotype.sanger <- subset_samples(enterotype, SeqTech %in% "Sanger")
-enterotype.454 <- subset_samples(enterotype, SeqTech %in% "Pyro454")
-enterotype.illumina <- subset_samples(enterotype, SeqTech %in% "Illumina")
-
-# top 10 taxa (Sanger)
-fig6.sanger <- plot_bar_err(subset_samples(enterotype.sanger, Enterotype %in% c("1", "2", "3")), 
-                             by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
-  ggtitle("Sanger") +
-  theme(legend.position="bottom", legend.direction="vertical") +
-  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name="Relative abundance") +
-  scale_fill_manual(values=c(color_bacteroides,
-                              color_bifidobacterium,
-                              color_faecalibacterium,
-                              color_lachnospira,
-                              color_prevotella))
-
-# top 10 taxa (454)
-fig6.454 <- plot_bar_err(subset_samples(enterotype.454, Enterotype %in% c("1", "2", "3")), 
-                          by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
-  ggtitle("454") +
-  theme(legend.position="bottom", legend.direction="vertical") +
-  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name=NULL) +
-  scale_fill_manual(values=c(color_bacteroides,
-                              color_blautia,
-                              color_faecalibacterium,
-                              color_prevotella,
-                              color_roseburia))
-
-# top 10 taxa (Illumina)
-fig6.illumina <- plot_bar_err(subset_samples(enterotype.illumina, Enterotype %in% c("1", "2", "3")), 
-                               by="Enterotype", n=5, top.type="taxa", taxrank="Genus", facet=~Enterotype, ncol=1) +
-  ggtitle("Illumina") +
-  theme(legend.position="bottom", legend.direction="vertical") +
-  scale_y_continuous(breaks=c(0, 0.5, 1), limits=c(0,1), name=NULL) +
-  scale_fill_manual(values=c(color_bacteroides,
-                              color_faecalibacterium,
-                              color_lachnospira,
-                              color_prevotella,
-                              color_roseburia))
-
-# arrange and view plot
-library(gridExtra)
-fig6 <- grid.arrange(arrangeGrob(fig6.sanger, fig6.454, ncol=2), 
-             arrangeGrob(fig6.illumina, nrow=1), nrow=1, widths=c(2,1))
-fig6
-
-# pdf
-if(!dir.exists("Figures")) {dir.create("Figures")}
-ggsave(fig6, filename="Figures/Figure_6.pdf")
-```
